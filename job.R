@@ -64,9 +64,9 @@ mcmapply(FUN = query_bio_wrapper,
 # This functions returns an updated subfolder_list object to avoid computing
 # species with less than the user defined minimum occurrence number
 subfolder_list <- mcmapply(FUN = query_env,
-                  FOLDER_NAME = run_name,
-                  SUBFOLDER_NAME = subfolder_list,
-                  mc.cores = min(length(subfolder_list), MAX_CLUSTERS), mc.preschedule = FALSE) %>% 
+                           FOLDER_NAME = run_name,
+                           SUBFOLDER_NAME = subfolder_list,
+                           mc.cores = min(length(subfolder_list), MAX_CLUSTERS), mc.preschedule = FALSE) %>% 
   unlist() %>% 
   na.omit(subfolder_list) %>% 
   .[grep("Error", ., invert = TRUE)] %>% # to exclude any API error or else
@@ -131,8 +131,6 @@ mcmapply(FUN = pdp,
 
 # --- 12.4 User synthesis
 user_synthesis(FOLDER_NAME = run_name)
-
-
 
 
 
@@ -211,6 +209,10 @@ for (sp in CALL$SP_SELECT) {
   }
   
 }
+
+
+# copy job.R to corresponding output directory
+
 
 #===============================================================================
 
