@@ -34,3 +34,8 @@ circular_pal <- function(n = 12){
   tmp <- c("#2166AC","#67A9CF","#D1E5F0","#F7F7F7","#FDDBC7","#EF8A62","#B2182B","#EF8A62","#FDDBC7","#F7F7F7","#D1E5F0","#67A9CF")
   pal <- colorRampPalette(tmp)(n)
 } # END FUNCTION
+
+diverging_pal <- function(n){
+  tmp <- c("#2166AC","#4393C3","#92C5DE","#D1E5F0","#F7F7F7","#FDDBC7","#F4A582","#D6604D","#B2182B")
+  colorRampPalette(tmp)(n)
+} # END FUNCTION

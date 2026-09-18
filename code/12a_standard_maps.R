@@ -80,15 +80,17 @@ standard_maps <- function(FOLDER_NAME = NULL, SUBFOLDER_NAME = NULL,
   # --- 3. Plot the legends
   # --- 3.1. biomass or habitat suitability legend
   hsi_pal <- inferno_pal(100)
+  div_pal <- diverging_pal(100)
   plot.new()
   
-  # --- 3.1.1. Extract the plot true scale (average max across bootstrap)
+  # --- 3.1.1. Extract the plot true scale (average max across bootstrap).
   if(CALL$DATA_TYPE == "continuous"){
     plot_scale <- lapply(loop_over, FUN = function(z){
-        z = MODEL[[z]]$proj$y_hat %>% apply(1, function(x)(x = mean(x, na.rm = TRUE)))
+      z = MODEL[[z]]$proj$y_hat %>% apply(1, function(x)(x = mean(x, na.rm = TRUE)))
     }) %>%
       unlist() %>%
-      quantile(0.95, na.rm = TRUE)
+      abs() %>% #Take absolute value for signed variables.
+      quantile(0.95, na.rm = TRUE) #Take 0.95 quantile for plot
   } else {
     plot_scale <- 1
   }
@@ -96,17 +98,17 @@ standard_maps <- function(FOLDER_NAME = NULL, SUBFOLDER_NAME = NULL,
   # --- 3.1.2. Plot the colorbar
   colorbar.plot(x = 0.5, y = 0, strip = seq(0,1,length.out = 100),
                 strip.width = 0.3, strip.length = 2.7,
-                col = hsi_pal, border = "black")
+                col = div_pal, border = "black")
   
   # --- 3.1.3. Apply the scale to the axis caption
   # This is only informative and the raster will be rescaled by the maximum
-  axis(side = 1, at = seq(0, 1, length.out = 5), labels = round(seq(0, 1 * plot_scale, length.out = 5), 2))
-  text(x = 0.5, y = 0.3, "Habitat Suitability Index", adj = 0.5)
+  axis(side = 1, at = seq(0, 1, length.out = 5), labels = round(seq(-plot_scale, plot_scale, length.out = 5), 2))
+  text(x = 0.5, y = 0.3, CALL$SP_SELECT, adj = 0.5)
 
   # --- 3.2. Observation vs 75% quartile
   plot.new()
   points(x = 0.1, y = 0.4, pch = 22, col = "black", bg = "gray80", cex = 5)
-  text(x = 0.2, y = 0.4, "Q75 Habitat Suitability Index", pos = 4)
+  text(x = 0.2, y = 0.4, "Q75", pos = 4)
   points(x = 0.1, y = 0.1, pch = 20, col = "black", cex = 2)
   text(x = 0.2, y = 0.1, "Observation", pos = 4)
   
@@ -127,12 +129,13 @@ standard_maps <- function(FOLDER_NAME = NULL, SUBFOLDER_NAME = NULL,
 
     # --- 4.2. Loop over month for maps
     for(j in seq_along(MONTH)){
-
+      
       # --- 4.2.1. Mean value
-      # Rescaled by the maximum to match the colorbar
+      # keep native units, clip symmetrically
       val <- apply(val_raw[,,MONTH[[j]]], 1, function(x)(x = mean(x, na.rm = TRUE)))
-      r_m <- terra::rast(r0, vals = val / plot_scale)
-      r_m[r_m>1] <- 1 # set the maximum at Q95
+      r_m <- terra::rast(r0, vals = val)
+      r_m[r_m >  plot_scale] <-  plot_scale
+      r_m[r_m < -plot_scale] <- -plot_scale
 
       # --- 4.2.2. Coefficient of variation
       # Computes mean SD across bootstrap and than average across month
@@ -154,7 +157,7 @@ standard_maps <- function(FOLDER_NAME = NULL, SUBFOLDER_NAME = NULL,
       r_mess[r_mess>100] <- 100 # cut the distribution tail for the colorbar
 
       # --- 4.3. Plot the corresponding maps
-      # --- 4.3.1. Plot the habitat suitability map
+      # --- 4.3.1. Plot the projection map
       if(CALL$DATA_TYPE == "proportions"){
         # Proportions
         tmp <- which(QUERY$annotations$worms_id == colnames(QUERY$Y)[i])
@@ -165,9 +168,13 @@ standard_maps <- function(FOLDER_NAME = NULL, SUBFOLDER_NAME = NULL,
                            "\n Colorbar scale:", format(round(terra::minmax(r_m)[2], 5), scientific = TRUE)),
               side = 1, line = 3, cex = 0.6)
       } else {
-        # biomass or habitat suitability values
-        plot(r_m, col = hsi_pal[max(1, floor(terra::minmax(r_m)[1]*100)):min(100, ceiling(terra::minmax(r_m)[2]*100))],
-             legend=FALSE, cex.main = 1,
+        # continuous values
+        #plot(r_m, col = hsi_pal[max(1, floor(terra::minmax(r_m)[1]*100)):min(100, ceiling(terra::minmax(r_m)[2]*100))],
+        #     legend=FALSE, cex.main = 1,
+        #     main = paste("Projection (", i, ") \n Month:", paste(MONTH[[j]], collapse = ",")))
+        plot(r_m, col = div_pal,
+             breaks = seq(-plot_scale, plot_scale, length.out = length(div_pal)+1),
+             legend = FALSE, cex.main = 1,
              main = paste("Projection (", i, ") \n Month:", paste(MONTH[[j]], collapse = ",")))
         mtext(text = paste("Predictive performance (", names(MODEL[[i]][["eval"]])[1], ") =", MODEL[[i]][["eval"]][[1]]),
               side = 1, line = 2, cex = 0.7)
@@ -183,13 +190,15 @@ standard_maps <- function(FOLDER_NAME = NULL, SUBFOLDER_NAME = NULL,
       # --- 4.3.2.2. Land mask
       plot(land, col = "antiquewhite4", legend=FALSE, add = TRUE)
       box("figure", col="black", lwd = 1)
-      # --- 4.3.2.3. Observations location
+      # --- 4.3.2.3. Observations location (keep all finite values including negative values)
       if(CALL$DATA_TYPE == "proportions"){tmp <- QUERY$S
-      } else {tmp <- QUERY$S[which(QUERY$Y$measurementvalue > 0),]}
+      } else {tmp <- QUERY$S[!is.na(QUERY$Y$measurementvalue), ]}
       # --- 4.3.2.4. Observation colors
       if(CALL$DATA_TYPE == "continuous"){
+        #points(tmp$decimallongitude, tmp$decimallatitude,
+        #       col = col_numeric("inferno", domain = range(0:plot_scale, na.rm = TRUE), alpha = 0.2, na.color = hsi_pal[100])(QUERY$Y$measurementvalue), pch = 20, cex = 0.6)
         points(tmp$decimallongitude, tmp$decimallatitude,
-               col = col_numeric("inferno", domain = range(0:plot_scale, na.rm = TRUE), alpha = 0.2, na.color = hsi_pal[100])(QUERY$Y$measurementvalue), pch = 20, cex = 0.6)
+               col = col_numeric(diverging_pal(100), domain = c(-plot_scale, plot_scale), alpha = 0.2, na.color = div_pal[length(div_pal)])(QUERY$Y$measurementvalue), pch = 20, cex = 0.6)
       } else if(CALL$DATA_TYPE == "proportions") {
         points(tmp$decimallongitude, tmp$decimallatitude,
                col = col_numeric("inferno", domain = range(QUERY$Y[,i], na.rm = TRUE), alpha = 0.2)(QUERY$Y[,i]), pch = 20, cex = 0.6)
@@ -234,7 +243,7 @@ standard_maps <- function(FOLDER_NAME = NULL, SUBFOLDER_NAME = NULL,
     plot(x = rep(1:4, nrow(rec)), y = rep(nrow(rec):1, each = 4), axes = FALSE, cex = 3,
          xlim = c(0,5), ylim = c(0,nrow(rec)+1), ylab = "", xlab = "",
          pch = 21, col = "black", bg = traffic_col)
-    axis(side = 3, at = 1:4, labels = c("A priori \n var. imp.","Perdictive \n performance","Cumulative \n var. imp.","Projection \n uncertainty"), tick = FALSE, line = NA, cex.axis = 1, las = 2)
+    axis(side = 3, at = 1:4, labels = c("A priori \n var. imp.","Predictive \n performance","Cumulative \n var. imp.","Projection \n uncertainty"), tick = FALSE, line = NA, cex.axis = 1, las = 2)
     axis(side = 2, at = nrow(rec):1, labels = rownames(rec), tick = FALSE, line = NA, las = 2, cex.axis = 0.7)
     axis(side = 4, at = nrow(rec):1, labels = rec$Recommandation, tick = FALSE, line = NA, las = 2, cex.axis = 0.7)
     plot.new()
@@ -252,8 +261,10 @@ standard_maps <- function(FOLDER_NAME = NULL, SUBFOLDER_NAME = NULL,
     # --- 6.2.1. Mean value
     # Rescaled by the maximum to match the colorbar
     val <- apply(y_ens, 1, function(x)(x = mean(x, na.rm = TRUE)))
-    r_m <- terra::rast(r0, vals = val / plot_scale)
-    r_m[r_m>1] <- 1 # set maximum at Q95
+    r_m <- terra::rast(r0, vals = val)
+    r_m[r_m >  plot_scale] <-  plot_scale
+    r_m[r_m < -plot_scale] <- -plot_scale
+    
 
     # --- 6.2.2. Coefficient of variation
     val <- apply(y_ens, 1, function(x)(x = sd(x, na.rm = TRUE)))
@@ -264,7 +275,10 @@ standard_maps <- function(FOLDER_NAME = NULL, SUBFOLDER_NAME = NULL,
     # --- 6.3. Plot the corresponding maps
     # --- 6.3.1. Plot the biomass
     # biomass or habitat suitability values
-    plot(r_m, col = hsi_pal[max(1, floor(terra::minmax(r_m)[1]*100)):min(100, ceiling(minmax(r_m)[2]*100))], legend=FALSE,
+    #plot(r_m, col = hsi_pal[max(1, floor(terra::minmax(r_m)[1]*100)):min(100, ceiling(minmax(r_m)[2]*100))], legend=FALSE,
+    #     main = "Projection ( Ensemble )")
+    plot(r_m, col = div_pal,
+         breaks = seq(-plot_scale, plot_scale, length.out = length(div_pal)+1), legend = FALSE,
          main = "Projection ( Ensemble )")
     mtext(text = paste("Predictive performance (", names(MODEL[["ENSEMBLE"]][["eval"]])[1], ") =", round(MODEL[["ENSEMBLE"]][["eval"]][[1]],2)),
           side = 1, line = 2, cex = 0.7)
@@ -279,10 +293,13 @@ standard_maps <- function(FOLDER_NAME = NULL, SUBFOLDER_NAME = NULL,
     plot(land, col = "antiquewhite4", legend=FALSE, add = TRUE)
     box("figure", col="black", lwd = 1)
     # --- 6.3.2.3. Observations
-    tmp <- QUERY$S[which(QUERY$Y$measurementvalue > 0),]
+    #tmp <- QUERY$S[which(QUERY$Y$measurementvalue > 0),]
+    tmp <- QUERY$S[!is.na(QUERY$Y$measurementvalue), ]
     if(CALL$DATA_TYPE == "continuous"){
+      #points(tmp$decimallongitude, tmp$decimallatitude,
+      #       col = col_numeric("inferno", domain = range(0:plot_scale, na.rm = TRUE), alpha = 0.2, na.color = hsi_pal[100])(QUERY$Y$measurementvalue), pch = 20, cex = 0.6)
       points(tmp$decimallongitude, tmp$decimallatitude,
-             col = col_numeric("inferno", domain = range(0:plot_scale, na.rm = TRUE), alpha = 0.2, na.color = hsi_pal[100])(QUERY$Y$measurementvalue), pch = 20, cex = 0.6)
+             col = col_numeric(diverging_pal(100), domain = c(-plot_scale, plot_scale), alpha = 0.2, na.color = div_pal[length(div_pal)])(QUERY$Y$measurementvalue), pch = 20, cex = 0.6)
     } else {
       points(tmp$decimallongitude, tmp$decimallatitude,
              col = "black", pch = 20)

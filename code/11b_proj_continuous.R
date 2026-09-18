@@ -121,11 +121,11 @@ proj_continuous <- function(QUERY, MODEL, CALL){
       })
     } # if cut
 
-    # --- 6. Compute the average CV across bootstrap runs as a QC
+    # --- 6. Compute the average bootstrap SD, normalized by the measurement values own SD
     if(dim(y_hat)[[2]] == CALL$N_BOOTSTRAP) {
       NSD <- apply(y_hat, c(1,3), function(x)(x = sd(x, na.rm = TRUE))) %>%
         mean(na.rm = TRUE)
-      NSD <- NSD/mean(y_hat, na.rm = TRUE)
+      NSD <- NSD / sd(QUERY$Y$measurementvalue, na.rm = TRUE) #NSD/mean(y_hat, na.rm = TRUE)
     } else {
       NSD <- NA
       message(paste("--- PROJ: Model", i, " discarded, bootstrap did not complete"))
