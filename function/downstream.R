@@ -138,7 +138,7 @@ save_outputs <- function(run_name) {
           bootstrap = bootstrap,
           layer_depth_range = layer_depth_range,
           varname = "proj_yhat",
-          units = units_target,
+          units = target_unit,
           longname = paste("CEPHALOPOD", model, "projection")
         )
         
@@ -247,7 +247,7 @@ save_outputs <- function(run_name) {
           bootstrap = bootstrap,
           layer_depth_range = layer_depth_range,
           varname = "proj_yhat",
-          units = units_target,
+          units = target_unit,
           longname = "CEPHALOPOD ensemble projection"
         )
         
